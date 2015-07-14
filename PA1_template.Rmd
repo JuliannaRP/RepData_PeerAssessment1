@@ -1,25 +1,153 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_template"
+output: html_document
 ---
 
+##Introduction
 
-## Loading and preprocessing the data
+This is an analysis of a personal activity monitoring device which collects data at 5 minute intervals throughout the day. The data were collected from an anonymous individual during the months of October and November, 2012, and comprise the number of steps taken during each 5 minute interval.
 
+##Analysis
 
+###1: Load and Tidy the Data
 
-## What is mean total number of steps taken per day?
+The data were loaded and the dates converted to POSIXct format.
 
+```{r 1.1}
+act <- read.csv("C:/Users/Julianna Poole/Documents/activity.csv")
+library(lubridate)
+act$date <- ymd(act$date)
+head(act)
+class(act$date)
+```
 
+###2: What is the mean total number of steps taken per day?
 
-## What is the average daily activity pattern?
+The total number of steps taken per day was calculated, and a histogram of the data was constucted.
 
+```{r 2.1}
+daysums <- aggregate(act[,"steps"], list(act$date), sum, na.rm = FALSE)
+head(daysums)
 
+hist(daysums[,2],
+     xlab="Total number of steps",
+     main="Histogram of steps taken each day")
+```
 
-## Imputing missing values
+The mean and the median of the total number of steps taken per day were calculated.
 
+```{r 2.2}
+mean(daysums[,2], na.rm=TRUE)
+median(daysums[,2], na.rm=TRUE)
+```
 
+###3: What is the average daily activity pattern?
 
-## Are there differences in activity patterns between weekdays and weekends?
+A time-series plot was constructed to view the number of steps taken, averaged across all days, for each 5-minute interval.
+
+```{r 3.1}
+intmean <- aggregate(act[,"steps"], list(act$interval), mean, na.rm = TRUE)
+colnames(intmean) <- c("Interval", "Mean")
+library(ggplot2)
+ggplot(intmean, aes(Interval, Mean)) + geom_line() +
+    labs(title="Mean number of steps taken per interval") +
+    labs(x="Interval", y="Mean number of steps taken")
+```
+
+The interval with the maximum mean number of steps taken was determined.
+
+```{r 3.2}
+maxrow <- which.max(intmean$Mean)
+intmean[maxrow,"Interval"]
+```
+
+###4: Imputing missing values
+
+Next, missing values (i.e. NAs) were dealt with. The total number of missing values was determined.
+
+```{r 4.1}
+sum(is.na(act$steps))
+```
+
+To eliminate missing values, a new dataset was constructed in which the missing values were replaced with the mean number of steps taken in the respective time intervals.
+
+```{r 4.2}
+actNA <- act
+for(i in 1:nrow(actNA)) {
+    if(is.na(actNA[i,"steps"])) {
+        int <- actNA[i,"interval"]
+        row <- which(intmean$Interval==int)
+        actNA[i,"steps"] <- intmean[row,"Mean"]
+    }
+}
+##With NAs
+head(act)
+##Without NAs
+head(actNA)
+```
+
+To compare the two datasets, histograms of each were constructed.
+
+```{r 4.3}
+daysums <- aggregate(act[,"steps"], list(act$date), sum, na.rm = FALSE)
+r1 <- rep("NAs Ignored", times=nrow(daysums))
+daysums <- cbind(daysums, r1)
+colnames(daysums) <- c("Date","Sum","DF")
+daysumsNA <- aggregate(actNA[,"steps"], list(actNA$date), sum, na.rm = FALSE)
+r2 <- rep("NAs Replaced", times=nrow(daysums))
+daysumsNA <- cbind(daysumsNA, r2)
+colnames(daysumsNA) <- c("Date","Sum","DF")
+ds <- rbind(daysums,daysumsNA)
+ggplot(ds, aes(Sum)) + geom_histogram(binwidth = max(ds$Sum, na.rm=TRUE)/5) + facet_grid(. ~ DF) +
+    labs(title="Histogram of steps taken each day") +
+    labs(x="Total number of steps")
+```
+
+As seen above, the counts in the bins increased when missing values were replaced, but the overall shape of the histogram remained the same. 
+
+Additionally, the means and medians of each dataset were calculated.
+
+```{r 4.4}
+daymean <- mean(daysums[,2], na.rm=TRUE)
+daymeanNA <- mean(daysumsNA[,2], na.rm=TRUE)
+daymean
+daymeanNA
+abs(daymean-daymeanNA)
+daymedian <- median(daysums[,2], na.rm=TRUE)
+daymedianNA <- median(daysumsNA[,2], na.rm=TRUE)
+daymedian
+daymedianNA
+abs(daymedian-daymedianNA)
+```
+
+The mean, therefore, did not change when the missing values were replaced, and the median changed by <2 steps.
+
+###5: Are there differences in activity patterns between weekdays and weekends?
+
+To determine if the number of steps was different on weekdays vs. weekends, a plot was constructed to compare the average number of steps taken in each interval on the weekend and on weekdays.
+
+First, the variable weekday/weekend was added to the data. To simplify, the dataset in which the missing values were replaced was used.
+
+```{r 5.1}
+DoW <- weekdays(actNA$date)
+for(i in 1:length(DoW)) {
+    if(DoW[i] %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")) {
+        DoW[i] <- "weekday"
+    }
+    if(DoW[i] %in% c("Saturday", "Sunday")) {
+        DoW[i] <- "weekend"
+    }
+}
+actNA2 <- cbind(actNA, DoW)
+head(actNA2)
+```
+
+Then the plots were constucted.
+
+```{r 5.2}
+intmeanNA <- aggregate(actNA2[,"steps"], list(actNA2$DoW,actNA2$interval), mean, na.rm = TRUE)
+colnames(intmeanNA) <- c("DoW","Interval","Mean")
+ggplot(intmeanNA, aes(Interval, Mean)) + geom_line() + facet_grid(DoW ~ .) +
+    labs(title="Mean of steps taken per interval") +
+    labs(x="Interval", y="Mean number of steps taken")
+```
